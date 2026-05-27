@@ -1,12 +1,3 @@
-/**
- * @file main.cpp
- * @brief Particle-Shower-GAN — Application Entry Point
- *
- * Wires together:
- *   1. GLFW window + OpenGL context
- *   2. Classical EM shower simulation
- *   3. OpenGL renderer (track visualisation)
- */
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
@@ -29,8 +20,7 @@ static constexpr float BG_R = 0x0A / 255.0f;
 static constexpr float BG_G = 0x0A / 255.0f;
 static constexpr float BG_B = 0x0A / 255.0f;
 
-
-static psg::Renderer* g_renderer = nullptr;  // for key/scroll callbacks
+static psg::Renderer* g_renderer = nullptr;  
 static int  g_fbW = WIN_WIDTH;
 static int  g_fbH = WIN_HEIGHT;
 
@@ -49,7 +39,7 @@ static void keyCallback(GLFWwindow* window, int key, int, int action, int)
 
 static void scrollCallback(GLFWwindow*, double, double yoffset)
 {
-   
+
     if (g_renderer)
     {
         g_renderer->camera().distance -= static_cast<float>(yoffset) * 10.0f;
@@ -57,6 +47,7 @@ static void scrollCallback(GLFWwindow*, double, double yoffset)
             std::max(50.0f, g_renderer->camera().distance);
     }
 }
+
 
 [[nodiscard]] static int fatalError(const char* msg)
 {
@@ -69,7 +60,6 @@ static void scrollCallback(GLFWwindow*, double, double yoffset)
 int main()
 {
     PSG_LOG_INFO("Particle-Shower-GAN v0.1 starting...");
-
 
     if (!glfwInit())
         return fatalError("glfwInit() failed.");
@@ -105,7 +95,7 @@ int main()
         glViewport(0, 0, fbW, fbH);
     }
 
-
+ 
     psg::SimConfig config;
     config.stepSize    = 0.5f;
     config.eCut        = 0.001f;
@@ -116,7 +106,7 @@ int main()
 
     psg::ShowerSimulation sim(config, detector);
     sim.seedPrimary(psg::ParticleType::Electron,
-                    100.0f,             
+                    100.0f,        
                     {0.0f, 0.0f, -170.0f}, 
                     {0.0f, 0.0f,  1.0f});   
 
@@ -124,7 +114,7 @@ int main()
     sim.run();
     PSG_LOG_INFO("Simulation complete.", sim.totalCount(), "particles.");
 
-
+ 
     psg::Renderer renderer(
         "shaders/particle_track.vert",
         "shaders/particle_track.frag"
@@ -133,19 +123,19 @@ int main()
 
     renderer.uploadTracks(sim.allParticles());
 
+  
     PSG_LOG_INFO("Entering render loop. Scroll to zoom, ESC to exit.");
 
     glClearColor(BG_R, BG_G, BG_B, 1.0f);
 
-  
+
     glEnable(GL_LINE_SMOOTH);
     glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
-
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-
+  
     float azimuthOffset = 0.0f;
 
     while (!glfwWindowShouldClose(window))
@@ -153,7 +143,8 @@ int main()
         glfwPollEvents();
 
         azimuthOffset += 0.002f;
-        renderer.camera().azimuth = 0.5f + azimuthOffset;
+        renderer.camera().azimuth   = 1.0f + azimuthOffset;
+        renderer.camera().elevation = 0.18f;
 
         glClear(GL_COLOR_BUFFER_BIT);
 
@@ -163,7 +154,6 @@ int main()
 
         glfwSwapBuffers(window);
     }
-
 
     g_renderer = nullptr;
     PSG_LOG_INFO("Shutting down.");
