@@ -20,6 +20,7 @@
  */
 
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <vector>
 
@@ -60,7 +61,10 @@ struct Vec3
 
     [[nodiscard]] float dot(const Vec3& o)  const noexcept { return x*o.x + y*o.y + z*o.z; }
     [[nodiscard]] float norm2()             const noexcept { return dot(*this); }
-    [[nodiscard]] Vec3  normalised()        const noexcept;
+    [[nodiscard]] Vec3 normalised() const noexcept {
+        const float n = std::sqrt(norm2());
+        return (n > 0.0f) ? Vec3{x/n, y/n, z/n} : Vec3{0.0f, 0.0f, 1.0f};
+    }
 
     Vec3 operator+(const Vec3& o) const noexcept { return {x+o.x, y+o.y, z+o.z}; }
     Vec3 operator*(float s)       const noexcept { return {x*s,   y*s,   z*s};   }
