@@ -3,3 +3,7 @@ compile_commands.json
 Particle-Shower-GAN/
 *.o
 *.a
+.venv/
+data/
+__pycache__/
+*.pyc
