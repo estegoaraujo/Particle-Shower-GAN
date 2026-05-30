@@ -17,7 +17,7 @@ ShowerSimulation::ShowerSimulation(const SimConfig& config,
     else
         rng_.seed(config_.seed);
 
-    particles_.reserve(4096);
+    particles_.reserve(static_cast<size_t>(config_.maxParticles) + 2);
 
     PSG_LOG_INFO("ShowerSimulation created. Material:", detector_.material.name,
                  "| X0:", detector_.material.radiationLength, "cm",
