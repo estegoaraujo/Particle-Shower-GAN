@@ -23,9 +23,13 @@ static constexpr float BG_G = 0x0A / 255.0f;
 static constexpr float BG_B = 0x0A / 255.0f;
 
 static psg::Renderer* g_renderer = nullptr;
-static int  g_fbW = WIN_WIDTH;
-static int  g_fbH = WIN_HEIGHT;
+static int   g_fbW = WIN_WIDTH;
+static int   g_fbH = WIN_HEIGHT;
 
+static bool  g_mouseDown   = false;
+static float g_lastMouseX  = 0.0f;
+static float g_lastMouseY  = 0.0f;
+static bool  g_autoRotate  = true;
 
 static void framebufferSizeCallback(GLFWwindow*, int w, int h)
 {
@@ -37,6 +41,9 @@ static void keyCallback(GLFWwindow* window, int key, int, int action, int)
 {
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
         glfwSetWindowShouldClose(window, GLFW_TRUE);
+
+    if (key == GLFW_KEY_SPACE && action == GLFW_PRESS)
+        g_autoRotate = !g_autoRotate;
 }
 
 static void scrollCallback(GLFWwindow*, double, double yoffset)
@@ -49,6 +56,48 @@ static void scrollCallback(GLFWwindow*, double, double yoffset)
     }
 }
 
+static void mouseButtonCallback(GLFWwindow*, int button, int action, int)
+{
+    if (button == GLFW_MOUSE_BUTTON_LEFT)
+    {
+        if (action == GLFW_PRESS)
+        {
+            g_mouseDown  = true;
+            g_autoRotate = false;
+        }
+        else if (action == GLFW_RELEASE)
+        {
+            g_mouseDown = false;
+        }
+    }
+}
+
+static void cursorPosCallback(GLFWwindow*, double xpos, double ypos)
+{
+    const float x = static_cast<float>(xpos);
+    const float y = static_cast<float>(ypos);
+
+    if (g_mouseDown && g_renderer)
+    {
+        const float dx = x - g_lastMouseX;
+        const float dy = y - g_lastMouseY;
+
+        const float sensitivity = 0.005f;
+        g_renderer->camera().azimuth   += dx * sensitivity;
+        g_renderer->camera().elevation -= dy * sensitivity;
+
+        const float maxEl =  1.5f;
+        const float minEl = -1.5f;
+        if (g_renderer->camera().elevation > maxEl)
+            g_renderer->camera().elevation = maxEl;
+        if (g_renderer->camera().elevation < minEl)
+            g_renderer->camera().elevation = minEl;
+    }
+
+    g_lastMouseX = x;
+    g_lastMouseY = y;
+}
+
 [[nodiscard]] static int fatalError(const char* msg)
 {
     std::cerr << "[FATAL] " << msg << '\n';
@@ -56,24 +105,14 @@ static void scrollCallback(GLFWwindow*, double, double yoffset)
     return EXIT_FAILURE;
 }
 
-
 static int runGenerate(int n)
 {
     PSG_LOG_INFO("Generate mode:", n, "showers → data/raw/");
-
     std::filesystem::create_directories("data/raw");
-
     psg::Exporter::generateDataset(
-        "data/raw",
-        n,
-        100.0f,                       
-        psg::ParticleType::Electron,
-        1                             
-    );
-
+        "data/raw", n, 100.0f, psg::ParticleType::Electron, 1);
     return EXIT_SUCCESS;
 }
-
 
 static int runVisualise()
 {
@@ -96,6 +135,8 @@ static int runVisualise()
     glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
     glfwSetKeyCallback(window, keyCallback);
     glfwSetScrollCallback(window, scrollCallback);
+    glfwSetMouseButtonCallback(window, mouseButtonCallback);
+    glfwSetCursorPosCallback(window, cursorPosCallback);
 
     if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress)))
         return fatalError("gladLoadGLLoader() failed.");
@@ -110,7 +151,6 @@ static int runVisualise()
         glViewport(0, 0, fbW, fbH);
     }
 
-    // Physics
     psg::SimConfig config;
     config.stepSize     = 0.5f;
     config.eCut         = 0.001f;
@@ -128,7 +168,6 @@ static int runVisualise()
     PSG_LOG_INFO("Done.", sim.totalCount(), "particles |",
                  detector.totalDeposit(), "GeV deposited.");
 
-    // Renderer
     psg::Renderer renderer(
         "shaders/particle_track.vert",
         "shaders/particle_track.frag"
@@ -144,13 +183,18 @@ static int runVisualise()
 
     float azimuthOffset = 0.0f;
 
-    PSG_LOG_INFO("Render loop — scroll to zoom, ESC to exit.");
+    PSG_LOG_INFO("Controls — drag: rotate | scroll: zoom | space: auto-rotate | ESC: exit");
+
     while (!glfwWindowShouldClose(window))
     {
         glfwPollEvents();
-        azimuthOffset += 0.002f;
-        renderer.camera().azimuth   = 1.0f + azimuthOffset;
-        renderer.camera().elevation = 0.18f;
+
+        if (g_autoRotate)
+        {
+            azimuthOffset += 0.002f;
+            renderer.camera().azimuth   = 1.0f + azimuthOffset;
+            renderer.camera().elevation = 0.18f;
+        }
 
         glClear(GL_COLOR_BUFFER_BIT);
         const float aspect = static_cast<float>(g_fbW) /
@@ -168,7 +212,6 @@ static int runVisualise()
 int main(int argc, char* argv[])
 {
     PSG_LOG_INFO("Particle-Shower-GAN v0.1");
-
 
     if (argc >= 3 && std::strcmp(argv[1], "--generate") == 0)
     {
