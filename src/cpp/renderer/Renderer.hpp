@@ -14,10 +14,11 @@ struct Camera
 {
     float azimuth   =  1.0f;
     float elevation =  0.18f;
-    float distance  =  350.0f;
+    float distance  =  500.0f;
     float fovY      =  45.0f;
     float nearPlane =   1.0f;
     float farPlane  = 2000.0f;
+
 
     [[nodiscard]] std::array<float, 16> mvp(float aspectRatio) const noexcept;
 };
@@ -70,5 +71,4 @@ private:
     void initBuffers(GLuint& vao, GLuint& vbo);
 };
 
-}
-
+} 

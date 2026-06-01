@@ -3,6 +3,8 @@
 #include "DetectorVolume.hpp"
 #include "Particle.hpp"
 
+#include <algorithm>
+#include <filesystem>
 #include <fstream>
 #include <stdexcept>
 #include <string>
@@ -49,10 +51,11 @@ public:
     }
 
     static std::vector<Particle> voxelsToParticles(
-        const VoxelGrid&     grid,
+        const VoxelGrid&      grid,
         const DetectorVolume& detector,
-        float                threshold = 0.001f,
-        int                  maxParticles = 2000)
+        float                 threshold   = 0.001f,
+        int                   maxParticles = 2000,
+        int                   idOffset    = 0)
     {
         std::vector<Particle> particles;
 
@@ -75,6 +78,7 @@ public:
                 {
                     const float e = grid.data[static_cast<size_t>(
                         iz * grid.nx * grid.ny + ix * grid.ny + iy)] / maxE;
+
                     if (e < threshold) continue;
 
                     const float wx = -detector.halfX + (ix + 0.5f) * dx;
@@ -82,15 +86,16 @@ public:
                     const float wz = -detector.halfZ + (iz + 0.5f) * dz;
 
                     Particle p;
-                    p.id     = count++;
+                    p.id     = idOffset + count++;
                     p.type   = ParticleType::Electron;
                     p.status = ParticleStatus::Stopped;
                     p.energy = e;
                     p.position  = {wx, wy, wz};
                     p.direction = {0.0f, 0.0f, 1.0f};
 
-                    p.trackPoints.push_back({wx, wy, wz - dz * 0.5f});
-                    p.trackPoints.push_back({wx, wy, wz + dz * 0.5f});
+                    p.trackPoints.push_back({wx, wy, wz - dz * 2.0f});
+                    p.trackPoints.push_back({wx, wy, wz});
+                    p.trackPoints.push_back({wx, wy, wz + dz * 2.0f});
 
                     particles.push_back(std::move(p));
                 }
@@ -98,6 +103,46 @@ public:
         }
 
         return particles;
+    }
+
+    static std::vector<Particle> loadDirectory(
+        const std::string&    dirPath,
+        const DetectorVolume& detector,
+        float                 threshold    = 0.001f,
+        int                   maxPerSample = 200)
+    {
+        std::vector<Particle> all;
+        int idOffset = 0;
+
+        std::vector<std::filesystem::path> files;
+        for (const auto& entry :
+             std::filesystem::directory_iterator(dirPath))
+        {
+            if (entry.path().extension() == ".npy")
+                files.push_back(entry.path());
+        }
+
+        std::sort(files.begin(), files.end());
+
+        for (const auto& f : files)
+        {
+            try
+            {
+                VoxelGrid grid = load(f.string());
+                auto particles = voxelsToParticles(
+                    grid, detector, threshold, maxPerSample, idOffset);
+                idOffset += static_cast<int>(particles.size());
+                all.insert(all.end(),
+                            std::make_move_iterator(particles.begin()),
+                            std::make_move_iterator(particles.end()));
+            }
+            catch (const std::exception& e)
+            {
+                continue;
+            }
+        }
+
+        return all;
     }
 };
 

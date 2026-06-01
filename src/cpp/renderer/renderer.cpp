@@ -194,12 +194,11 @@ void Renderer::drawSideBySide(int windowWidth, int windowHeight) const
     {
         glViewport(halfW, 0, halfW, windowHeight);
         glBindVertexArray(vaoGan_);
-        drawTracks(ganTracks_, maxEnergyGan_, aspect);
+        drawTracks(ganTracks_, maxEnergyGan_ * 0.01f, aspect);
         glBindVertexArray(0);
     }
 
     glViewport(0, 0, windowWidth, windowHeight);
 }
 
-} 
-
+}

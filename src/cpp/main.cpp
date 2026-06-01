@@ -155,22 +155,49 @@ static int runVisualise(const std::string& ganFile)
         "shaders/particle_track.frag"
     );
     g_renderer = &renderer;
-    renderer.uploadTracks(sim.allParticles());
+
+    if (!ganFile.empty())
+    {
+        auto realVoxelParticles = psg::NpyLoader::voxelsToParticles(
+                                      detector.voxels, detector,
+                                      0.001f, 2000);
+        renderer.uploadTracks(realVoxelParticles);
+        PSG_LOG_INFO("Real voxels uploaded:", realVoxelParticles.size(), "segments.");
+    }
+    else
+    {
+        renderer.uploadTracks(sim.allParticles());
+    }
 
     if (!ganFile.empty())
     {
         try
         {
-            PSG_LOG_INFO("Loading GAN file:", ganFile);
-            psg::VoxelGrid grid = psg::NpyLoader::load(ganFile);
-            auto ganParticles   = psg::NpyLoader::voxelsToParticles(
-                                      grid, detector);
+            std::vector<psg::Particle> ganParticles;
+
+            if (std::filesystem::is_directory(ganFile))
+            {
+                PSG_LOG_INFO("Loading GAN directory:", ganFile);
+                ganParticles = psg::NpyLoader::loadDirectory(
+                                   ganFile, detector, 0.001f, 200);
+                PSG_LOG_INFO("GAN directory loaded:",
+                             ganParticles.size(), "voxel segments.");
+            }
+            else
+            {
+                PSG_LOG_INFO("Loading GAN file:", ganFile);
+                psg::VoxelGrid grid = psg::NpyLoader::load(ganFile);
+                ganParticles = psg::NpyLoader::voxelsToParticles(
+                                   grid, detector);
+                PSG_LOG_INFO("GAN shower loaded:",
+                             ganParticles.size(), "voxel segments.");
+            }
+
             renderer.uploadGanTracks(ganParticles);
-            PSG_LOG_INFO("GAN shower loaded:", ganParticles.size(), "voxel segments.");
         }
         catch (const std::exception& e)
         {
-            PSG_LOG_WARN("Could not load GAN file:", e.what());
+            PSG_LOG_WARN("Could not load GAN:", e.what());
             PSG_LOG_WARN("Showing only real shower.");
         }
     }
@@ -195,8 +222,8 @@ static int runVisualise(const std::string& ganFile)
         if (g_autoRotate)
         {
             azimuthOffset += 0.002f;
-            renderer.camera().azimuth   = 1.0f + azimuthOffset;
-            renderer.camera().elevation = 0.18f;
+            renderer.camera().azimuth   = 1.5708f + azimuthOffset;
+            renderer.camera().elevation = 0.25f;
         }
 
         glClear(GL_COLOR_BUFFER_BIT);
