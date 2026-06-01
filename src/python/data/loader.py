@@ -6,9 +6,10 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 
-VOXEL_NX = 20
-VOXEL_NY = 20
-VOXEL_NZ = 40
+
+VOXEL_NX = 20   
+VOXEL_NY = 20   
+VOXEL_NZ = 40  
 
 
 class ShowerDataset(Dataset):
@@ -17,13 +18,15 @@ class ShowerDataset(Dataset):
         self,
         data_dir:    str,
         n_showers:   Optional[int] = None,
-        max_energy:  float = 100.0,
+        max_energy:  float = 500.0,
         normalise:   bool  = True,
     ):
+
         self.data_dir   = Path(data_dir)
         self.max_energy = max_energy
         self.normalise  = normalise
 
+      
         csv_path = self.data_dir / "metadata.csv"
         if not csv_path.exists():
             raise FileNotFoundError(f"metadata.csv not found in {data_dir}. "
@@ -41,15 +44,19 @@ class ShowerDataset(Dataset):
         return len(self.metadata)
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+ 
         row = self.metadata.iloc[idx]
         shower_id = int(row["shower_id"])
 
-        npy_path = self.data_dir / f"shower_{shower_id:04d}.npy"
-        voxels = np.load(str(npy_path))
 
+        npy_path = self.data_dir / f"shower_{shower_id:04d}.npy"
+        voxels = np.load(str(npy_path)) 
+
+        # Sanity check
         assert voxels.shape == (VOXEL_NX, VOXEL_NY, VOXEL_NZ), \
             f"Unexpected voxel shape {voxels.shape} in {npy_path}"
 
+ 
         if self.normalise:
             total = voxels.sum()
             if total > 1e-8:
@@ -57,6 +64,7 @@ class ShowerDataset(Dataset):
 
         voxel_tensor = torch.from_numpy(voxels).float().unsqueeze(0)
 
+ 
         energy_tensor = torch.tensor(
             row["primary_energy_GeV"] / self.max_energy,
             dtype=torch.float32
@@ -66,23 +74,26 @@ class ShowerDataset(Dataset):
 
 
 def make_dataloader(
-    data_dir:    str,
-    batch_size:  int          = 32,
-    n_showers:   Optional[int] = None,
-    shuffle:     bool         = True,
-    num_workers: int          = 4,
+    data_dir:   str,
+    batch_size: int  = 32,
+    n_showers:  Optional[int] = None,
+    shuffle:    bool = True,
+    num_workers: int = 4,
 ) -> DataLoader:
+    
     dataset = ShowerDataset(data_dir, n_showers=n_showers)
     return DataLoader(
         dataset,
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=num_workers,
-        pin_memory=torch.cuda.is_available(),
+        pin_memory=torch.cuda.is_available(), 
     )
 
 
+
 def inspect_dataset(data_dir: str, n: int = 5) -> None:
+
     dataset = ShowerDataset(data_dir, n_showers=n, normalise=False)
 
     print(f"\n{'─'*60}")
@@ -91,8 +102,7 @@ def inspect_dataset(data_dir: str, n: int = 5) -> None:
 
     for i in range(min(n, len(dataset))):
         voxels, energy = dataset[i]
-        raw_voxels = voxels.numpy()[0]
-
+        raw_voxels = voxels.numpy()[0]  
         print(f"\n  Shower {i:04d}")
         print(f"    Shape:          {raw_voxels.shape}")
         print(f"    Total deposit:  {raw_voxels.sum():.4f} GeV")

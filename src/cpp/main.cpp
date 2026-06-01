@@ -5,6 +5,7 @@
 #include "core/DetectorVolume.hpp"
 #include "core/ShowerSimulation.hpp"
 #include "core/Exporter.hpp"
+#include "core/NpyLoader.hpp"
 #include "renderer/Renderer.hpp"
 #include "utils/Logger.hpp"
 
@@ -16,32 +17,29 @@
 
 static constexpr int   WIN_WIDTH  = 1280;
 static constexpr int   WIN_HEIGHT = 720;
-static constexpr char  WIN_TITLE[]= "Particle-Shower-GAN";
+static constexpr char  WIN_TITLE[]= "Particle-Shower-GAN  |  LEFT: Real  |  RIGHT: GAN";
 
 static constexpr float BG_R = 0x0A / 255.0f;
 static constexpr float BG_G = 0x0A / 255.0f;
 static constexpr float BG_B = 0x0A / 255.0f;
 
-static psg::Renderer* g_renderer = nullptr;
-static int   g_fbW = WIN_WIDTH;
-static int   g_fbH = WIN_HEIGHT;
-
-static bool  g_mouseDown   = false;
-static float g_lastMouseX  = 0.0f;
-static float g_lastMouseY  = 0.0f;
-static bool  g_autoRotate  = true;
+static psg::Renderer* g_renderer  = nullptr;
+static int   g_fbW      = WIN_WIDTH;
+static int   g_fbH      = WIN_HEIGHT;
+static bool  g_mouseDown = false;
+static float g_lastMouseX = 0.0f;
+static float g_lastMouseY = 0.0f;
+static bool  g_autoRotate = true;
 
 static void framebufferSizeCallback(GLFWwindow*, int w, int h)
 {
     g_fbW = w; g_fbH = h;
-    glViewport(0, 0, w, h);
 }
 
 static void keyCallback(GLFWwindow* window, int key, int, int action, int)
 {
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
         glfwSetWindowShouldClose(window, GLFW_TRUE);
-
     if (key == GLFW_KEY_SPACE && action == GLFW_PRESS)
         g_autoRotate = !g_autoRotate;
 }
@@ -60,15 +58,8 @@ static void mouseButtonCallback(GLFWwindow*, int button, int action, int)
 {
     if (button == GLFW_MOUSE_BUTTON_LEFT)
     {
-        if (action == GLFW_PRESS)
-        {
-            g_mouseDown  = true;
-            g_autoRotate = false;
-        }
-        else if (action == GLFW_RELEASE)
-        {
-            g_mouseDown = false;
-        }
+        if (action == GLFW_PRESS)  { g_mouseDown = true;  g_autoRotate = false; }
+        if (action == GLFW_RELEASE){ g_mouseDown = false; }
     }
 }
 
@@ -79,21 +70,12 @@ static void cursorPosCallback(GLFWwindow*, double xpos, double ypos)
 
     if (g_mouseDown && g_renderer)
     {
-        const float dx = x - g_lastMouseX;
-        const float dy = y - g_lastMouseY;
-
         const float sensitivity = 0.005f;
-        g_renderer->camera().azimuth   += dx * sensitivity;
-        g_renderer->camera().elevation -= dy * sensitivity;
-
-        const float maxEl =  1.5f;
-        const float minEl = -1.5f;
-        if (g_renderer->camera().elevation > maxEl)
-            g_renderer->camera().elevation = maxEl;
-        if (g_renderer->camera().elevation < minEl)
-            g_renderer->camera().elevation = minEl;
+        g_renderer->camera().azimuth   += (x - g_lastMouseX) * sensitivity;
+        g_renderer->camera().elevation -= (y - g_lastMouseY) * sensitivity;
+        g_renderer->camera().elevation  =
+            std::max(-1.5f, std::min(1.5f, g_renderer->camera().elevation));
     }
-
     g_lastMouseX = x;
     g_lastMouseY = y;
 }
@@ -110,11 +92,13 @@ static int runGenerate(int n)
     PSG_LOG_INFO("Generate mode:", n, "showers → data/raw/");
     std::filesystem::create_directories("data/raw");
     psg::Exporter::generateDataset(
-        "data/raw", n, 100.0f, psg::ParticleType::Electron, 1);
+        "data/raw", n,
+        {10.0f, 50.0f, 100.0f, 200.0f, 500.0f},
+        psg::ParticleType::Electron, 1);
     return EXIT_SUCCESS;
 }
 
-static int runVisualise()
+static int runVisualise(const std::string& ganFile)
 {
     if (!glfwInit())
         return fatalError("glfwInit() failed.");
@@ -148,7 +132,6 @@ static int runVisualise()
         int fbW, fbH;
         glfwGetFramebufferSize(window, &fbW, &fbH);
         g_fbW = fbW; g_fbH = fbH;
-        glViewport(0, 0, fbW, fbH);
     }
 
     psg::SimConfig config;
@@ -165,8 +148,7 @@ static int runVisualise()
 
     PSG_LOG_INFO("Running shower simulation...");
     sim.run();
-    PSG_LOG_INFO("Done.", sim.totalCount(), "particles |",
-                 detector.totalDeposit(), "GeV deposited.");
+    PSG_LOG_INFO("Done.", sim.totalCount(), "particles.");
 
     psg::Renderer renderer(
         "shaders/particle_track.vert",
@@ -175,6 +157,24 @@ static int runVisualise()
     g_renderer = &renderer;
     renderer.uploadTracks(sim.allParticles());
 
+    if (!ganFile.empty())
+    {
+        try
+        {
+            PSG_LOG_INFO("Loading GAN file:", ganFile);
+            psg::VoxelGrid grid = psg::NpyLoader::load(ganFile);
+            auto ganParticles   = psg::NpyLoader::voxelsToParticles(
+                                      grid, detector);
+            renderer.uploadGanTracks(ganParticles);
+            PSG_LOG_INFO("GAN shower loaded:", ganParticles.size(), "voxel segments.");
+        }
+        catch (const std::exception& e)
+        {
+            PSG_LOG_WARN("Could not load GAN file:", e.what());
+            PSG_LOG_WARN("Showing only real shower.");
+        }
+    }
+
     glClearColor(BG_R, BG_G, BG_B, 1.0f);
     glEnable(GL_LINE_SMOOTH);
     glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
@@ -182,8 +182,11 @@ static int runVisualise()
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     float azimuthOffset = 0.0f;
+    const bool sideBySide = !ganFile.empty();
 
     PSG_LOG_INFO("Controls — drag: rotate | scroll: zoom | space: auto-rotate | ESC: exit");
+    if (sideBySide)
+        PSG_LOG_INFO("Side-by-side mode: LEFT = Real C++  |  RIGHT = GAN");
 
     while (!glfwWindowShouldClose(window))
     {
@@ -197,9 +200,13 @@ static int runVisualise()
         }
 
         glClear(GL_COLOR_BUFFER_BIT);
-        const float aspect = static_cast<float>(g_fbW) /
-                             static_cast<float>(g_fbH);
-        renderer.draw(aspect);
+
+        if (sideBySide)
+            renderer.drawSideBySide(g_fbW, g_fbH);
+        else
+            renderer.draw(static_cast<float>(g_fbW) /
+                          static_cast<float>(g_fbH));
+
         glfwSwapBuffers(window);
     }
 
@@ -216,13 +223,13 @@ int main(int argc, char* argv[])
     if (argc >= 3 && std::strcmp(argv[1], "--generate") == 0)
     {
         const int n = std::atoi(argv[2]);
-        if (n <= 0)
-        {
-            std::cerr << "Usage: psg --generate <N>\n";
-            return EXIT_FAILURE;
-        }
+        if (n <= 0) { std::cerr << "Usage: psg --generate <N>\n"; return EXIT_FAILURE; }
         return runGenerate(n);
     }
 
-    return runVisualise();
+    std::string ganFile = "";
+    if (argc >= 3 && std::strcmp(argv[1], "--gan") == 0)
+        ganFile = argv[2];
+
+    return runVisualise(ganFile);
 }

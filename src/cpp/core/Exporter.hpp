@@ -9,6 +9,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace psg {
 
@@ -22,7 +23,8 @@ public:
         if (!file.is_open())
             throw std::runtime_error("Exporter: cannot open: " + filepath);
 
-        const uint8_t magic[] = {0x93, 'N', 'U', 'M', 'P', 'Y', 0x01, 0x00};
+        const uint8_t magic[] = {0x93, 'N', 'U', 'M', 'P', 'Y',
+                                   0x01, 0x00};
         file.write(reinterpret_cast<const char*>(magic), sizeof(magic));
 
         std::ostringstream headerStream;
@@ -60,11 +62,12 @@ public:
             throw std::runtime_error("Exporter: write error: " + filepath);
     }
 
-    static void generateDataset(const std::string& outputDir,
-                                  int                n,
-                                  float              energy,
-                                  ParticleType       type,
-                                  uint32_t           baseSeed = 1)
+    static void generateDataset(
+        const std::string&        outputDir,
+        int                       n,
+        const std::vector<float>& energies = {10.0f, 50.0f, 100.0f, 200.0f, 500.0f},
+        ParticleType              type     = ParticleType::Electron,
+        uint32_t                  baseSeed = 1)
     {
         const std::string csvPath = outputDir + "/metadata.csv";
         std::ofstream csv(csvPath);
@@ -81,8 +84,12 @@ public:
 
         DetectorVolume detector;
 
+        const int nEnergies = static_cast<int>(energies.size());
+
         for (int i = 0; i < n; ++i)
         {
+            const float energy = energies[static_cast<size_t>(i % nEnergies)];
+
             config.seed = baseSeed + static_cast<uint32_t>(i);
 
             detector.voxels.reset();
@@ -107,12 +114,18 @@ public:
                 << detector.totalDeposit() << "\n";
 
             if ((i + 1) % 100 == 0 || i == n - 1)
-                std::cout << "[INFO]  Generated " << (i+1) << "/" << n << " showers\n";
+            {
+                std::cout << "[INFO]  Generated " << (i+1)
+                          << "/" << n << " showers"
+                          << "  (last E=" << energy << " GeV)\n";
+            }
         }
 
         std::cout << "[INFO]  Dataset saved to " << outputDir
-                  << "  (" << n << " showers)\n";
+                  << "  (" << n << " showers across "
+                  << nEnergies << " energy levels)\n";
     }
 };
 
-}
+} 
+

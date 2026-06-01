@@ -10,11 +10,11 @@ class Discriminator(nn.Module):
             nn.LeakyReLU(0.2, inplace=True),
 
             nn.Conv3d(32, 64, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm3d(64),
+            nn.InstanceNorm3d(64, affine=True),
             nn.LeakyReLU(0.2, inplace=True),
 
             nn.Conv3d(64, 128, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm3d(128),
+            nn.InstanceNorm3d(128, affine=True),
             nn.LeakyReLU(0.2, inplace=True),
         )
 
